@@ -100,10 +100,13 @@ class UnrealManagerBase(object):
 	
 	def getEditorBinary(self, cmdVersion=False):
 		"""
-		Determines the location of the UE4Editor binary
+		Determines the location of the UE4Editor/UnrealEditor binary
 		"""
-		return os.path.join(self.getEngineRoot(), 'Engine', 'Binaries', self.getPlatformIdentifier(), 'UE4Editor' + self._editorPathSuffix(cmdVersion))
-	
+		if self._getEngineVersionDetails()['MajorVersion'] >= 5:
+			return os.path.join(self.getEngineRoot(), 'Engine', 'Binaries', self.getPlatformIdentifier(), 'UnrealEditor' + self._editorPathSuffix(cmdVersion))
+		else:
+			return os.path.join(self.getEngineRoot(), 'Engine', 'Binaries', self.getPlatformIdentifier(), 'UE4Editor' + self._editorPathSuffix(cmdVersion))	
+
 	def getBuildScript(self):
 		"""
 		Determines the location of the script file to perform builds
@@ -193,15 +196,17 @@ class UnrealManagerBase(object):
 		Retrieves the compiler flags for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		fmt = PrintingFormat.singleLine()
-		if libs[0] == '--multiline':
-			fmt = PrintingFormat.multiLine()
-			libs = libs[1:]
-		
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
-			platformDefaults = False
-			libs = libs[1:]
-		
+
+		if libs:
+			if libs[0] == '--multiline':
+				fmt = PrintingFormat.multiLine()
+				libs = libs[1:]
+
+			if libs[0] == '--nodefaults':
+				platformDefaults = False
+				libs = libs[1:]
+
 		details = self.getThirdpartyLibs(libs, includePlatformDefaults=platformDefaults)
 		return details.getCompilerFlags(self.getEngineRoot(), fmt)
 	
@@ -210,20 +215,22 @@ class UnrealManagerBase(object):
 		Retrieves the linker flags for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		fmt = PrintingFormat.singleLine()
-		if libs[0] == '--multiline':
-			fmt = PrintingFormat.multiLine()
-			libs = libs[1:]
-		
 		includeLibs = True
-		if (libs[0] == '--flagsonly'):
-			includeLibs = False
-			libs = libs[1:]
-		
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
-			platformDefaults = False
-			libs = libs[1:]
-		
+
+		if libs:
+			if libs[0] == '--multiline':
+				fmt = PrintingFormat.multiLine()
+				libs = libs[1:]
+
+			if (libs[0] == '--flagsonly'):
+				includeLibs = False
+				libs = libs[1:]
+
+			if libs[0] == '--nodefaults':
+				platformDefaults = False
+				libs = libs[1:]
+
 		details = self.getThirdpartyLibs(libs, includePlatformDefaults=platformDefaults)
 		return details.getLinkerFlags(self.getEngineRoot(), fmt, includeLibs)
 	
@@ -232,15 +239,17 @@ class UnrealManagerBase(object):
 		Retrieves the CMake invocation flags for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		fmt = PrintingFormat.singleLine()
-		if libs[0] == '--multiline':
-			fmt = PrintingFormat.multiLine()
-			libs = libs[1:]
-		
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
-			platformDefaults = False
-			libs = libs[1:]
-		
+
+		if libs:
+			if libs[0] == '--multiline':
+				fmt = PrintingFormat.multiLine()
+				libs = libs[1:]
+
+			if libs[0] == '--nodefaults':
+				platformDefaults = False
+				libs = libs[1:]
+
 		details = self.getThirdpartyLibs(libs, includePlatformDefaults=platformDefaults)
 		CMakeCustomFlags.processLibraryDetails(details)
 		return details.getCMakeFlags(self.getEngineRoot(), fmt)
@@ -250,10 +259,10 @@ class UnrealManagerBase(object):
 		Retrieves the list of include directories for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
+		if libs and libs[0] == '--nodefaults':
 			platformDefaults = False
 			libs = libs[1:]
-		
+
 		details = self.getThirdpartyLibs(libs, includePlatformDefaults=platformDefaults)
 		return details.getIncludeDirectories(self.getEngineRoot(), delimiter='\n')
 	
@@ -262,10 +271,10 @@ class UnrealManagerBase(object):
 		Retrieves the list of library files for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
+		if libs and libs[0] == '--nodefaults':
 			platformDefaults = False
 			libs = libs[1:]
-		
+
 		details = self.getThirdpartyLibs(libs, includePlatformDefaults=platformDefaults)
 		return details.getLibraryFiles(self.getEngineRoot(), delimiter='\n')
 	
@@ -274,7 +283,7 @@ class UnrealManagerBase(object):
 		Retrieves the list of preprocessor definitions for building against the Unreal-bundled versions of the specified third-party libraries
 		"""
 		platformDefaults = True
-		if libs[0] == '--nodefaults':
+		if libs and libs[0] == '--nodefaults':
 			platformDefaults = False
 			libs = libs[1:]
 		
@@ -344,7 +353,10 @@ class UnrealManagerBase(object):
 			self.buildTarget('ShaderCompileWorker', 'Development', [], suppressOutput)
 		
 		# Generate the arguments to pass to UBT
-		target = self.getDescriptorName(descriptor) + target if self.isProject(descriptor) else 'UE4Editor'
+		if self._getEngineVersionDetails()['MajorVersion'] >= 5:
+			target = self.getDescriptorName(descriptor) + target if self.isProject(descriptor) else 'UnrealEditor'
+		else:
+			target = self.getDescriptorName(descriptor) + target if self.isProject(descriptor) else 'UE4Editor'
 		baseArgs = ['-{}='.format(descriptorType) + descriptor]
 		
 		# Perform the build
@@ -362,7 +374,7 @@ class UnrealManagerBase(object):
 		"""
 		projectFile = self.getProjectDescriptor(dir) if dir is not None else ''
 		extraFlags = ['-debug'] + args if debug == True else args
-		Utility.run([self.getEditorBinary(True), projectFile, '-stdout', '-FullStdOutLogOutput'] + extraFlags, raiseOnError=True)
+		Utility.run([self.getEditorBinary(True), projectFile] + extraFlags + ['-stdout', '-FullStdOutLogOutput'], raiseOnError=True)
 	
 	def runUAT(self, args):
 		"""
@@ -399,8 +411,12 @@ class UnrealManagerBase(object):
 		if configuration == 'Shipping':
 			extraArgs.append('-nodebuginfo')
 		
-		# Do not create a .pak file when packaging for HTML5
-		pakArg = '-package' if platform.upper() == 'HTML5' else '-pak'
+		# Define the usage of pak files, default value is pak files for all platforms except HTML5
+		pakArg = Utility.findArgs(extraArgs, ['-pak', '-package'])
+		if len(pakArg) == 0:
+			pakArg = '-package' if platform.upper() == 'HTML5' else '-pak'
+		else:
+			pakArg = ''
 		
 		# Include the `-allmaps` flag if we are building a client target and haven't specified a list of maps
 		buildingClient = (len(Utility.findArgs(extraArgs, ['-noclient'])) == 0)
@@ -408,10 +424,14 @@ class UnrealManagerBase(object):
 		if buildingClient == True and specifiedMaps == False:
 			extraArgs.append('-allmaps')
 		
+		# Automatically set the archive directory if the user has not explicitly specified one
+		if (len(Utility.findArgs(extraArgs, ['-archivedirectory='])) == 0):
+			extraArgs.extend(['-archivedirectory=' + os.path.join(os.path.abspath(dir), 'dist')])
+		
 		# Invoke UAT to package the build
-		distDir = os.path.join(os.path.abspath(dir), 'dist')
 		self.runUAT([
-			'BuildCookRun',
+			'BuildCookRun'
+			] + extraArgs + [
 			'-utf8output',
 			'-clientconfig=' + configuration,
 			'-serverconfig=' + configuration,
@@ -422,9 +442,8 @@ class UnrealManagerBase(object):
 			'-stage',
 			'-prereqs',
 			pakArg,
-			'-archive',
-			'-archivedirectory=' + distDir
-		] + extraArgs)
+			'-archive'
+		])
 	
 	def packagePlugin(self, dir=os.getcwd(), extraArgs=[]):
 		"""
@@ -434,10 +453,11 @@ class UnrealManagerBase(object):
 		# Invoke UAT to package the build
 		distDir = os.path.join(os.path.abspath(dir), 'dist')
 		self.runUAT([
-			'BuildPlugin',
+			'BuildPlugin'
+			] + extraArgs + [
 			'-Plugin=' + self.getPluginDescriptor(dir),
 			'-Package=' + distDir
-		] + extraArgs)
+		])
 	
 	def packageDescriptor(self, dir=os.getcwd(), args=[]):
 		"""
